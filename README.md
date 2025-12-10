@@ -1,3 +1,5 @@
+# WORK IN PROGRESS
+
 # MQTT MCP Server
 
 An [MCP](https://modelcontextprotocol.io/) server that interfaces with an MQTT broker. It allows AI agents to explore MQTT topics, subtopics, and inspect their values.
