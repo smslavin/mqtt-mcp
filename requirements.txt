@@ -1,0 +1,3 @@
+mcp
+paho-mqtt
+python-dotenv
