@@ -10,9 +10,9 @@ import paho.mqtt.client as mqtt
 # Load environment variables
 load_dotenv()
 
-MQTT_BROKER_URL = os.getenv("MQTT_BROKER_URL", "test.mosquitto.org")
+MQTT_BROKER_URL = os.getenv("MQTT_BROKER_URL", "localhost")
 MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", "1883"))
-MQTT_TOPIC_ROOT = "V/#"
+MQTT_TOPIC_ROOT = os.getenv("MQTT_TOPIC_ROOT", "#")
 
 # Global state for topic tree
 # Structure: { "topic_part": { "_value": "payload", "subtopic": { ... } } }
@@ -20,7 +20,7 @@ topic_tree: Dict[str, Any] = {}
 topic_values: Dict[str, str] = {} # distinct map for easy value lookup: full_path -> value
 
 # Initialize MCP Server
-mcp = FastMCP("mqtt-mcp")
+mcp = FastMCP("mqtt-mcp", port=int(os.getenv("FASTMCP_PORT", "8001")))
 
 # MQTT Client Setup
 def on_connect(client, userdata, flags, rc, properties=None):
@@ -140,5 +140,95 @@ def read_topic_value(topic_path: str) -> str:
         
         return f"Topic '{topic_path}' has not been seen."
 
+@mcp.tool()
+def get_full_topic_tree() -> str:
+    """
+    Return the complete known topic tree with all values from the persistent subscription.
+    Useful for seeing everything received since the server started.
+    """
+    if not topic_tree:
+        return "No topics discovered yet."
+
+    def build_full_tree(node: Dict[str, Any], prefix: str = "") -> list:
+        lines = []
+        for key in sorted(node.keys()):
+            if key == "_value":
+                continue
+            child = node[key]
+            value = child.get("_value", "")
+            value_str = f" = {value}" if value else ""
+            lines.append(f"{prefix}{key}{value_str}")
+            lines.extend(build_full_tree(child, prefix + "  "))
+        return lines
+
+    lines = build_full_tree(topic_tree)
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def scan_topics(topic_filter: str = "#", duration_seconds: int = 10) -> str:
+    """
+    Subscribe to a topic pattern, collect messages for a fixed duration, then return
+    a structured topic tree. Use this to discover what topics an MQTT source is publishing.
+
+    This is the primary tool for brownfield onboarding: subscribe to a wildcard pattern,
+    observe what topics appear, and use the result to design a System Platform template model.
+
+    Args:
+        topic_filter:     MQTT subscription filter, e.g. "Plant/WTP/#" or "#".
+                          Wildcards: # matches everything below, + matches one level.
+        duration_seconds: How long to listen before returning results (default 10).
+    """
+    import time
+
+    scan_tree: Dict[str, Any] = {}
+    scan_values: Dict[str, str] = {}
+
+    def on_scan_message(client, userdata, msg):
+        try:
+            topic = msg.topic
+            payload = msg.payload.decode("utf-8", errors="ignore")
+            scan_values[topic] = payload
+            parts = topic.split("/")
+            current = scan_tree
+            for part in parts:
+                if part not in current:
+                    current[part] = {}
+                current = current[part]
+            current["_value"] = payload
+        except Exception:
+            pass
+
+    mqtt_client.message_callback_add(topic_filter, on_scan_message)
+    mqtt_client.subscribe(topic_filter)
+
+    time.sleep(duration_seconds)
+
+    mqtt_client.unsubscribe(topic_filter)
+    mqtt_client.message_callback_remove(topic_filter)
+
+    if not scan_tree:
+        return f"No messages received on '{topic_filter}' in {duration_seconds}s. Check that the broker address is correct and the publisher is running."
+
+    def build_tree(node: Dict[str, Any], prefix: str = "") -> list:
+        lines = []
+        for key in sorted(node.keys()):
+            if key == "_value":
+                continue
+            child = node[key]
+            value = child.get("_value", "")
+            value_str = f" = {value}" if value else ""
+            lines.append(f"{prefix}{key}{value_str}")
+            lines.extend(build_tree(child, prefix + "  "))
+        return lines
+
+    tree_lines = build_tree(scan_tree)
+    unique_topics = len(scan_values)
+    return (
+        f"Scan of '{topic_filter}' ({duration_seconds}s): {unique_topics} unique topics\n\n"
+        + "\n".join(tree_lines)
+    )
+
+
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run("sse")
