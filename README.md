@@ -139,6 +139,20 @@ mqtt-mcp (FastMCP / SSE)
 python server.py
 ```
 
+### Running as a Windows Service (recommended for lab / demo VMs)
+
+Installs MqttMCP as an auto-start Windows service via [NSSM](https://nssm.cc/download):
+
+1. Install NSSM and add it to PATH
+2. Edit the Configuration block at the top of `install_service.ps1` (broker URL/port if not localhost)
+3. Run as Administrator:
+   ```powershell
+   .\install_service.ps1
+   ```
+
+To remove: `.\uninstall_service.ps1` (run as Administrator).  
+Logs are written to `logs\` with 10 MB rotation and automatic restart on crash.
+
 ### Connecting to Claude Desktop or Claude Code
 
 ```json
