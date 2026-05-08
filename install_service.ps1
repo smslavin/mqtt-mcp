@@ -4,7 +4,7 @@
     Install the MqttMCP server as a Windows service via NSSM.
 
 .DESCRIPTION
-    Installs one service: MqttMCP (port 8001).
+    Installs one service: AVEVA Demo MqttMCP (port 8001).
     NSSM must be on PATH (https://nssm.cc/download). Run as Administrator.
 
 .EXAMPLE
@@ -31,7 +31,7 @@ if (-not (Get-Command nssm -ErrorAction SilentlyContinue)) {
 $LogDir = Join-Path $Root "logs"
 New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 
-$svcName = "MqttMCP"
+$svcName = "AVEVA Demo MqttMCP"
 $exe     = Join-Path $Root ".venv-mqtt\Scripts\python.exe"
 
 Write-Host "Installing $svcName ..." -ForegroundColor Cyan
