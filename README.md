@@ -87,8 +87,8 @@ mqtt-mcp (FastMCP / SSE)
 | `list_topics` | List top-level topics discovered under the persistent subscription root |
 | `list_subtopics` | List subtopics for a given topic path |
 | `read_topic_value` | Read the last known value for a specific topic path |
-| `get_full_topic_tree` | Return the complete accumulated topic tree with all values inline |
-| `scan_topics` | Subscribe to any wildcard pattern for N seconds and return a structured snapshot |
+| `get_full_topic_tree` | Return the complete accumulated topic tree with all values inline; capped at 200 topics with a truncation notice |
+| `scan_topics` | Subscribe to any wildcard pattern for N seconds (max 30) and return a structured JSON snapshot |
 
 ---
 
