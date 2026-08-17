@@ -6,7 +6,7 @@ import time
 from typing import Any, Dict, List, Optional
 import json
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from dotenv import load_dotenv
 import paho.mqtt.client as mqtt
 
@@ -32,7 +32,9 @@ topic_values: Dict[str, str] = {}
 _state_lock = threading.Lock()
 
 # Initialize MCP Server
-mcp = FastMCP("mqtt-mcp", port=int(os.getenv("FASTMCP_PORT", "8001")))
+# mcp 2.0's MCPServer constructor dropped the port= shortcut FastMCP had;
+# port is now passed to run() below instead.
+mcp = MCPServer("mqtt-mcp")
 
 # MQTT Client Setup
 def on_connect(client, userdata, flags, rc, properties=None):
@@ -270,4 +272,4 @@ def scan_topics(topic_filter: str = "#", duration_seconds: int = 10) -> str:
 
 
 if __name__ == "__main__":
-    mcp.run("sse")
+    mcp.run("sse", port=int(os.getenv("FASTMCP_PORT", "8001")))

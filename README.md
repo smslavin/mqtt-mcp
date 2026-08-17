@@ -49,7 +49,7 @@ It also supports on-demand scanning: the `scan_topics` tool subscribes to any wi
 AI Assistant (Claude Desktop, Claude Code, etc.)
         │
         ▼
-mqtt-mcp (FastMCP / SSE)
+mqtt-mcp (MCP SDK / SSE)
         │
         ├── In-memory topic tree (built from live messages)
         │
@@ -73,7 +73,7 @@ mqtt-mcp (FastMCP / SSE)
 
 | Component | Technology |
 |---|---|
-| MCP Server | Python, [FastMCP](https://github.com/jlowin/fastmcp) |
+| MCP Server | Python, [MCP SDK](https://github.com/modelcontextprotocol/python-sdk) (`MCPServer`, mcp>=2.0) |
 | MQTT Client | [paho-mqtt](https://github.com/eclipse/paho.mqtt.python) |
 | Broker Compatibility | Any MQTT 3.1.1 / 5.0 compliant broker (Mosquitto, HiveMQ, etc.) |
 | Runtime | Python 3.13 |
@@ -99,7 +99,7 @@ mqtt-mcp (FastMCP / SSE)
 | `MQTT_BROKER_URL` | `localhost` | Hostname or IP of the MQTT broker |
 | `MQTT_BROKER_PORT` | `1883` | Broker port |
 | `MQTT_TOPIC_ROOT` | `#` | Wildcard subscription root for the persistent background subscription |
-| `FASTMCP_PORT` | `8001` | Port for the FastMCP SSE server |
+| `FASTMCP_PORT` | `8001` | Port for the MCP SSE server |
 
 ---
 
