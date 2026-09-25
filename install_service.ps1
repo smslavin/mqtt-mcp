@@ -21,6 +21,9 @@ $Root             = $PSScriptRoot
 $MqttBrokerUrl    = "localhost"
 $MqttBrokerPort   = "1883"
 $MqttTopicRoot    = "#"
+# Local broker service to start before MqttMCP. Ignored if the broker is remote
+# or the service is not installed.
+$BrokerService    = "mosquitto"
 
 # ── End Configuration ──────────────────────────────────────────────────────────
 
@@ -59,6 +62,15 @@ nssm set $svcName AppRotateBytes 10485760
 nssm set $svcName AppExit Default Restart
 nssm set $svcName AppRestartDelay 60000
 nssm set $svcName Start SERVICE_AUTO_START
+
+# server.py connects to the broker once at startup, so the broker must be up first.
+$isLocalBroker = $MqttBrokerUrl -in @("localhost", "127.0.0.1", "::1")
+if ($isLocalBroker -and (Get-Service -Name $BrokerService -ErrorAction SilentlyContinue)) {
+    nssm set $svcName DependOnService $BrokerService
+    Write-Host "Dependency set: $svcName -> $BrokerService"
+} elseif ($isLocalBroker) {
+    Write-Warning "Broker service '$BrokerService' not found — no dependency set. Install Mosquitto (see README) and re-run."
+}
 
 nssm start $svcName
 Start-Sleep -Milliseconds 500

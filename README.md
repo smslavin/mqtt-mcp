@@ -108,11 +108,31 @@ mqtt-mcp (MCP SDK / SSE)
 ### Prerequisites
 
 - Python 3.13
-- An accessible MQTT broker (e.g. [Mosquitto](https://mosquitto.org/))
+- An accessible MQTT broker (e.g. [Mosquitto](https://mosquitto.org/)). **The server does not install one.** If nothing is listening on the configured host/port, startup logs `[WinError 10061] No connection could be made because the target machine actively refused it`.
 
 ### Installation
 
-1. Create and activate a virtual environment:
+1. Install a broker (skip if using an existing broker on another host):
+    - Download and run the Windows installer from [mosquitto.org/download](https://mosquitto.org/download/). It registers a `mosquitto` Windows service.
+    - Start it and set it to auto-start (as Administrator):
+      ```powershell
+      Start-Service mosquitto
+      Set-Service mosquitto -StartupType Automatic
+      Test-NetConnection localhost -Port 1883   # TcpTestSucceeded should be True
+      ```
+    - Out of the box, Mosquitto 2.x accepts only localhost, anonymous connections. That is fine when mqtt-mcp runs on the same machine. To accept connections from other hosts, add the following to `mosquitto.conf`, restart the service, and allow inbound TCP 1883 in Windows Firewall:
+      ```
+      listener 1883 0.0.0.0
+      allow_anonymous true
+      ```
+    - A broker with no publishers is empty. Whatever feeds data into it (simulator, gateway, etc.) must also be set up before the tools return anything.
+
+2. If the repo was copied from a zip or download, unblock the scripts. Otherwise PowerShell refuses to run them with "is not digitally signed":
+    ```powershell
+    Get-ChildItem -Recurse | Unblock-File
+    ```
+
+3. Create and activate a virtual environment:
     ```bash
     python -m venv .venv-mqtt
     .venv-mqtt\Scripts\activate   # Windows
@@ -120,7 +140,7 @@ mqtt-mcp (MCP SDK / SSE)
     pip install -r requirements.txt
     ```
 
-2. Configure the broker (optional — defaults to `localhost:1883`):
+4. Configure the broker (optional — defaults to `localhost:1883`):
     ```
     MQTT_BROKER_URL=your.broker.hostname
     MQTT_BROKER_PORT=1883
@@ -144,7 +164,7 @@ python server.py
 Installs MqttMCP as an auto-start Windows service via [NSSM](https://nssm.cc/download):
 
 1. Install NSSM and add it to PATH
-2. Edit the Configuration block at the top of `install_service.ps1` (broker URL/port if not localhost)
+2. Edit the Configuration block at the top of `install_service.ps1` (broker URL/port if not localhost). If the broker is local, the script makes the service depend on `$BrokerService` (default `mosquitto`) so the broker starts first. Install Mosquitto before running the script, or the dependency is skipped with a warning.
 3. Run as Administrator:
    ```powershell
    .\install_service.ps1
