@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 import json
 
 from mcp.server.mcpserver import MCPServer
+from mcp.types import ToolAnnotations
 from dotenv import load_dotenv
 import paho.mqtt.client as mqtt
 
@@ -35,6 +36,12 @@ _state_lock = threading.Lock()
 # mcp 2.0's MCPServer constructor dropped the port= shortcut FastMCP had;
 # port is now passed to run() below instead.
 mcp = MCPServer("mqtt-mcp")
+
+# Every tool here only observes the plant, so all are declared read-only.
+# Clients (the chat UI, AGGREGATOR_READ_ONLY) rely on this: a tool without
+# annotations is treated as a write and gated. Connect/disconnect change this
+# server's own session, not the plant, so they count as read-only too.
+READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True)
 
 # MQTT Client Setup
 def on_connect(client, userdata, flags, rc, properties=None):
@@ -85,7 +92,7 @@ def start_mqtt():
 
 start_mqtt()
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 def list_topics() -> str:
     """
     List all known top-level topics currently discovered under the subscribed root.
@@ -108,7 +115,7 @@ def list_topics() -> str:
 
     return f"Known topics under root:\n{build_tree_str(snapshot)}"
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 def list_subtopics(topic_path: str) -> str:
     """
     List the immediate subtopics for a given topic path.
@@ -134,7 +141,7 @@ def list_subtopics(topic_path: str) -> str:
 
     return f"Subtopics for '{topic_path}':\n" + "\n".join([f"- {s}" for s in subtopics])
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 def read_topic_value(topic_path: str) -> str:
     """
     Read the last known value of a specific MQTT topic.
@@ -165,7 +172,7 @@ def read_topic_value(topic_path: str) -> str:
 
     return f"Topic '{topic_path}' has not been seen."
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 def get_full_topic_tree() -> str:
     """
     Return the complete known topic tree with all values from the persistent subscription.
@@ -204,7 +211,7 @@ def get_full_topic_tree() -> str:
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ_ONLY)
 def scan_topics(topic_filter: str = "#", duration_seconds: int = 10) -> str:
     """
     Subscribe to a topic pattern, collect messages for a fixed duration, then return
