@@ -41,6 +41,12 @@ def on_connect(client, userdata, flags, rc, properties=None):
     logger.info("Connected to MQTT broker with result code %s", rc)
     client.subscribe(MQTT_TOPIC_ROOT)
 
+def on_disconnect(client, userdata, flags, rc, properties=None):
+    logger.warning("Disconnected from MQTT broker (%s); retrying in background", rc)
+
+def on_connect_fail(client, userdata):
+    logger.warning("MQTT broker %s:%s unreachable; retrying", MQTT_BROKER_URL, MQTT_BROKER_PORT)
+
 def on_message(client, userdata, msg):
     try:
         topic = msg.topic
@@ -61,15 +67,21 @@ def on_message(client, userdata, msg):
 
 mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 mqtt_client.on_connect = on_connect
+mqtt_client.on_disconnect = on_disconnect
+mqtt_client.on_connect_fail = on_connect_fail
 mqtt_client.on_message = on_message
+mqtt_client.reconnect_delay_set(min_delay=1, max_delay=30)
 
 def start_mqtt():
+    # connect_async lets the loop thread own the connection, so paho retries
+    # with backoff if the broker is down at startup or drops later.
+    # on_connect resubscribes after each reconnect.
     logger.info("Connecting to %s:%s...", MQTT_BROKER_URL, MQTT_BROKER_PORT)
     try:
-        mqtt_client.connect(MQTT_BROKER_URL, MQTT_BROKER_PORT, 60)
+        mqtt_client.connect_async(MQTT_BROKER_URL, MQTT_BROKER_PORT, 60)
         mqtt_client.loop_start()
     except Exception as e:
-        logger.error("Failed to connect to MQTT broker: %s", e)
+        logger.error("Failed to start MQTT client: %s", e)
 
 start_mqtt()
 
