@@ -15,7 +15,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# ── Configuration ──────────────────────────────────────────────────────────────
+# -- Configuration --------------------------------------------------------------
 
 $Root             = $PSScriptRoot
 $MqttBrokerUrl    = "localhost"
@@ -25,7 +25,7 @@ $MqttTopicRoot    = "#"
 # or the service is not installed.
 $BrokerService    = "mosquitto"
 
-# ── End Configuration ──────────────────────────────────────────────────────────
+# -- End Configuration ----------------------------------------------------------
 
 if (-not (Get-Command nssm -ErrorAction SilentlyContinue)) {
     Write-Error "nssm not found on PATH. Download from https://nssm.cc/download and add to PATH."
@@ -47,7 +47,7 @@ if ($existing) {
 
 nssm install $svcName $exe "server.py"
 nssm set $svcName AppDirectory $Root
-nssm set $svcName Description "MQTT MCP Server — brownfield MQTT data access (port 8001)"
+nssm set $svcName Description "MQTT MCP Server - brownfield MQTT data access (port 8001)"
 
 $envBlock = "FASTMCP_PORT=8001`nMQTT_BROKER_URL=$MqttBrokerUrl`nMQTT_BROKER_PORT=$MqttBrokerPort`nMQTT_TOPIC_ROOT=$MqttTopicRoot"
 nssm set $svcName AppEnvironmentExtra $envBlock
@@ -63,17 +63,18 @@ nssm set $svcName AppExit Default Restart
 nssm set $svcName AppRestartDelay 60000
 nssm set $svcName Start SERVICE_AUTO_START
 
-# server.py connects to the broker once at startup, so the broker must be up first.
+# Start the broker first so server.py connects on its first attempt instead of
+# waiting out a retry backoff.
 $isLocalBroker = $MqttBrokerUrl -in @("localhost", "127.0.0.1", "::1")
 if ($isLocalBroker -and (Get-Service -Name $BrokerService -ErrorAction SilentlyContinue)) {
     nssm set $svcName DependOnService $BrokerService
     Write-Host "Dependency set: $svcName -> $BrokerService"
 } elseif ($isLocalBroker) {
-    Write-Warning "Broker service '$BrokerService' not found — no dependency set. Install Mosquitto (see README) and re-run."
+    Write-Warning "Broker service '$BrokerService' not found - no dependency set. Install Mosquitto (see README) and re-run."
 }
 
 nssm start $svcName
 Start-Sleep -Milliseconds 500
 $status = (Get-Service -Name $svcName).Status
-Write-Host "$svcName — $status" -ForegroundColor Green
+Write-Host "$svcName - $status" -ForegroundColor Green
 Write-Host "Logs: $LogDir"
