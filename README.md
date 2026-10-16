@@ -167,8 +167,11 @@ Installs MqttMCP as an auto-start Windows service via [NSSM](https://nssm.cc/dow
 2. Edit the Configuration block at the top of `install_service.ps1` (broker URL/port if not localhost). If the broker is local, the script makes the service depend on `$BrokerService` (default `mosquitto`) so the broker starts first. Install Mosquitto before running the script, or the dependency is skipped with a warning.
 3. Run as Administrator:
    ```powershell
-   .\install_service.ps1
+   .\install_service.ps1            # port 8001, or the port the service already has
+   .\install_service.ps1 -Port 8003 # a different port
    ```
+
+Re-running the script keeps the existing service's port, so it can't move the server away from the port the aggregator lists. On the demo VM that is 8003: IIS holds 8001 there, and graccess-mcp's `install_services.ps1 -MqttMcpPort 8003` installs the service. The script refuses a port another program already holds.
 
 To remove: `.\uninstall_service.ps1` (run as Administrator).  
 Logs are written to `logs\` with 10 MB rotation and automatic restart on crash.
