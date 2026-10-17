@@ -51,7 +51,7 @@ $exe     = Join-Path $Root ".venv-mqtt\Scripts\python.exe"
 
 $existing = Get-Service -Name $svcName -ErrorAction SilentlyContinue
 
-# Keep an existing service's port unless -Port says otherwise (mcp-servers#7).
+# Keep an existing service's port unless -Port says otherwise (smslavin/mcp-servers#7).
 if ($Port -eq 0) {
     $Port = 8001
     $params = "HKLM:\SYSTEM\CurrentControlSet\Services\$svcName\Parameters"
