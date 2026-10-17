@@ -18,7 +18,7 @@ For engineers commissioning systems, diagnosing issues, or building integrations
 
 mqtt-mcp connects to an MQTT broker, subscribes to the configured topic root, and builds a live map of the topic hierarchy as messages arrive. That map is exposed as AI-callable tools via the [Model Context Protocol](https://modelcontextprotocol.io/), enabling an AI assistant to navigate the topic tree and read values conversationally.
 
-It also supports on-demand scanning: the `scan_topics` tool subscribes to any wildcard pattern for a configurable duration and returns a structured snapshot of what was observed — designed for brownfield discovery workflows where the topic structure is unknown in advance.
+It also supports on-demand scanning: the `scan_topics` tool listens to any wildcard pattern for a configurable duration, on a connection of its own, and returns what it heard — designed for brownfield discovery workflows where the topic structure is unknown in advance.
 
 **Example interactions:**
 
@@ -36,10 +36,10 @@ It also supports on-demand scanning: the `scan_topics` tool subscribes to any wi
 
 | Capability | Description |
 |---|---|
-| **Persistent discovery** | Subscribes to a configurable wildcard root at startup and builds a real-time tree of all active topics |
-| **On-demand scanning** | `scan_topics` subscribes to any pattern for a fixed duration — useful for discovering unknown topic structures |
+| **Persistent discovery** | Subscribes to a configurable wildcard root at startup and caches the last payload of every topic, with its arrival time |
+| **On-demand scanning** | `scan_topics` listens to any pattern for 1-30 s on its own connection — useful for discovering unknown topic structures |
 | **Tree navigation** | Explore top-level topics or drill into specific branches of the hierarchy |
-| **Value inspection** | Read the last known value for any discovered topic |
+| **Value inspection** | Read the last known value of one or more topics, with its age and whether the broker is connected |
 
 ---
 
@@ -51,7 +51,7 @@ AI Assistant (Claude Desktop, Claude Code, etc.)
         ▼
 mqtt-mcp (MCP SDK / SSE)
         │
-        ├── In-memory topic tree (built from live messages)
+        ├── In-memory topic cache (last payload + arrival time per topic, bounded)
         │
         └── MQTT Broker (paho-mqtt, background loop)
                 └── Subscribes to MQTT_TOPIC_ROOT on connect (default: #)
@@ -59,13 +59,15 @@ mqtt-mcp (MCP SDK / SSE)
 
 ### Design Decisions
 
-**Background MQTT loop.** The paho-mqtt client runs in a background thread via `loop_start()`, continuously receiving messages and updating the in-memory topic tree. MCP tool calls read from this shared state synchronously, keeping tool response times fast regardless of broker message volume.
+**Background MQTT loop.** The paho-mqtt client runs in a background thread via `loop_start()`, continuously receiving messages and updating the in-memory cache: one flat dict of topic → (payload, arrival time). The lock is held only to store a message or copy the dict; tools build their results from the copy, so they never hold up the network thread.
 
-**Dual data structures.** Topics are stored in two parallel structures — a nested dict tree for hierarchical navigation and a flat dict for direct value lookup by full path. This avoids traversal overhead on `read_topic_value` calls while preserving the tree structure needed for `list_subtopics`.
+**Values carry their age.** Every result says whether the broker is connected and when the newest message arrived, and every value has `received_at` and `age_s`. While the broker is down the tools still answer from the cache, flagged as such, instead of passing old values off as live.
 
-**Isolated scan callbacks.** `scan_topics` uses paho's `message_callback_add` / `message_callback_remove` to route messages for the scan filter into a fresh dict without disturbing the persistent subscription. The subscription is removed after the scan window closes.
+**Bounded cache.** The cache keeps at most `MQTT_MAX_TOPICS` topics (default 10000); messages on further new topics are dropped and counted in `messages_dropped`. Payloads over 2000 characters are cut, saying so. Topics named after batches or serial numbers would otherwise grow memory for as long as the service runs.
 
-**Retained message model.** The server captures and holds the last known value for each topic. This reflects how MQTT retained messages work in practice and gives a useful snapshot of current system state without requiring a live subscription at query time.
+**Scans on their own connection.** `scan_topics` connects a short-lived client of its own, so a scan can't unsubscribe the persistent subscription or keep it from updating, whatever filter it uses, and concurrent scans don't interfere.
+
+**Structured results, failures as errors.** Every tool returns structured content (with an output schema). A failure — nothing heard yet, an unknown topic, a scan that hears nothing, an unreachable broker — is a tool error, so clients don't cache or audit it as a result.
 
 ---
 
@@ -84,11 +86,12 @@ mqtt-mcp (MCP SDK / SSE)
 
 | Tool | Description |
 |---|---|
-| `list_topics` | List top-level topics discovered under the persistent subscription root |
-| `list_subtopics` | List subtopics for a given topic path |
-| `read_topic_value` | Read the last known value for a specific topic path |
-| `get_full_topic_tree` | Return the complete accumulated topic tree with all values inline; capped at 200 topics with a truncation notice |
-| `scan_topics` | Subscribe to any wildcard pattern for N seconds (max 30) and return a structured JSON snapshot |
+| `browse_topics` | List the subtopics directly below a topic (the top level by default), with values and child counts; up to 500 |
+| `browse_topic_tree` | Return every known topic below a topic (everything by default), depth-first with values; capped at 500 topics |
+| `read_topics` | Read the last payload of up to 200 topics, with arrival time and age; a topic without a value gets an error entry |
+| `scan_topics` | Listen to any wildcard pattern for 1-30 s (default 10) on a connection of its own and return every topic heard, up to 2000 |
+
+Before 0.2.0, `list_topics` and `list_subtopics` were `browse_topics`, `get_full_topic_tree` was `browse_topic_tree`, and `read_topic_value` was `read_topics`. The names follow one verb set with opcua-mcp: `browse_*`, `read_*`, `search_*`/`scan_*`.
 
 ---
 
@@ -99,6 +102,7 @@ mqtt-mcp (MCP SDK / SSE)
 | `MQTT_BROKER_URL` | `localhost` | Hostname or IP of the MQTT broker |
 | `MQTT_BROKER_PORT` | `1883` | Broker port |
 | `MQTT_TOPIC_ROOT` | `#` | Wildcard subscription root for the persistent background subscription |
+| `MQTT_MAX_TOPICS` | `10000` | Most topics the cache keeps; messages on further new topics are dropped and counted |
 | `FASTMCP_PORT` | `8001` | Port for the MCP SSE server |
 
 ---
@@ -139,6 +143,7 @@ mqtt-mcp (MCP SDK / SSE)
     source .venv-mqtt/bin/activate  # macOS/Linux
     pip install -r requirements.txt
     ```
+    `requirements.txt` pins exact versions; raise them on purpose, with the tests passing.
 
 4. Configure the broker (optional — defaults to `localhost:1883`):
     ```
@@ -146,6 +151,15 @@ mqtt-mcp (MCP SDK / SSE)
     MQTT_BROKER_PORT=1883
     MQTT_TOPIC_ROOT=#
     ```
+
+### Tests
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+The tests start an [amqtt](https://github.com/Yakifo/amqtt) broker on a free port and call every tool through an MCP client, including scans on the feed's own filter and a broker that goes away. They need no other service.
 
 ### Running
 
@@ -194,7 +208,7 @@ Logs are written to `logs\` with 10 MB rotation and automatic restart on crash.
 ## Limitations and Known Constraints
 
 - **Read-only.** The server cannot publish to topics. All operations are observational.
-- **In-memory state only.** The topic tree is built from messages received since the server started. Topics that haven't published since startup will not appear until a new message arrives.
+- **In-memory state only.** The cache is built from messages received since the server started. Topics that haven't published since startup will not appear until a new message arrives.
 - **No authentication.** The current implementation connects to the broker without credentials. Brokers requiring username/password authentication are not yet supported.
 - **No TLS.** Encrypted broker connections are not currently supported.
 
