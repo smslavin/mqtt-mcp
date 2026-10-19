@@ -2,6 +2,10 @@
 
 Each release is a git tag, `vX.Y.Z`. Issue numbers refer to this repo unless they name another.
 
+## Unreleased
+
+- **`uninstall_service.ps1` removes the service** (found upgrading the Skytap VM). It passed the name unquoted, so nssm got `AVEVA`, removed nothing, and the script still said "AVEVA Demo MqttMCP removed." It now passes the name as one argument and fails with nssm's exit code if the service is still there.
+
 ## 0.2.0
 
 Breaking: tool names and results changed. The galaxy site plugin in smslavin/graccess-mcp needs its matching release.
